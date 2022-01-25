@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="icons">
+    <file>add.png</file>
+    <file>restart.png</file>
+    <file>settings.png</file>
+    <file>eye.png</file>
+  </qresource>
+</RCC>
