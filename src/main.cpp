@@ -15,6 +15,7 @@ const int PAGE_SET_MOD = 0x04;
 const int PAGE_COMMING_SOON = 0x05;
 const int PAGE_SPEED_RESULTS = 0x06;
 const int PAGE_TIMER = 0x07;
+const int PAGE_CALIBRATION = 0x0B;
 
 const int NONE = 0x08;
 const int SPEED = 0x09;     //MODS
@@ -27,6 +28,7 @@ bool first_run_menu = true;
 bool first_run_comming_soon = true;
 bool first_run_speed_results = true;
 bool first_run_timer = true;
+bool first_run_calibration = true;
 
 int actual_page = 0x01;         //for showing actual page
 int last_page = 0;              //optimalization for showing pages repeatetly
@@ -37,27 +39,27 @@ bool bluetooth_active = false;
 
 int actual_error = 0;
 
-double distance = 5.6;
+double distance = 2;
 
 int max_cursor = 4;
 int last_cursor = 0;
 int cursor = 1;
 
 unsigned int lastDebounceTime = 0;      //BUTTON
-const unsigned int DEBOUNCE_DELAY = 50;
+const unsigned int DEBOUNCE_DELAY = 100;
 int lastFlickerableState = LOW;
 int lastSteadyState = LOW;
 int currentState = LOW;
 bool pressed = false;
 
-const int BUTTON_PIN = 5;
+const int BUTTON_PIN = 14;
 
 int counter = 0;    //ROTARY ENCODER
 int aState = 0;
 int aLastState = 0; 
 
-const int OUTPUTA =  16;     //encoder pins
-const int OUTPUTB =  4;
+const int OUTPUTA =  18;     //encoder pins
+const int OUTPUTB =  5;
 
 
 bool event_update = false;
@@ -69,23 +71,28 @@ unsigned long start_timer = 0;
 unsigned long timer_end = 0;
 bool timer_run = false;
 bool timer_stop = false;
-bool timer_running = true;
+bool timer_running = false;
 bool now_timer = false;
 
 int timer_min = 0;
 int timer_sec = 0;
 int timer_setina = 0;
 
+const int TIMER_COM = 100;
+unsigned long timer_com_time = 0;
+
 int current_time = 0;
 
 const int FOTO_START = 2;
-const int FOTO_START_VALUE = 150;
+int FOTO_START_VALUE = 150;
 int foto_value_start = 0;
 
 const int FOTO_STOP = 15;
-const int FOTO_STOP_VALUE = 100;
+int FOTO_STOP_VALUE = 100;
 int foto_value_stop = 0;
 
+
+bool com_enabled = false;
 
 bool buttonEnc();
 
@@ -107,6 +114,7 @@ int lastPage();
 void updatePage();
 void updateButton();
 void updateEncoder();
+void pageCalibration();
 
 void clearBluePart();
 
@@ -116,7 +124,8 @@ bool fotoStop();
 void timer();
 void runTimer();
 
-
+void readCommand();
+void reset();
 
 
 void setup(){
@@ -134,11 +143,17 @@ void setup(){
     pinMode(FOTO_START, INPUT);
     pinMode(FOTO_STOP, INPUT);
 
-    Serial.print("INIT DONE");
+    pageCalibration();
+
+    Serial.println("INIT DONE");
+    Serial.println("C-I-DONE");
+
 
 }
 
 void loop(){
+
+    readCommand();
 
     updateButton();
     updateEncoder();
@@ -146,6 +161,9 @@ void loop(){
     //current_time = millis();
     timer();
     runTimer();
+    /*Serial.println(number);
+    number++;
+    delay(250);*/
     
 }
 
@@ -446,6 +464,15 @@ void pageSpeedResults(){
     oled_display.println("m/s");
     oled_display.display();
 
+    if(com_enabled){
+        Serial.print("C-R-");
+        Serial.print(distance, 1);
+        Serial.print(":");
+        Serial.print(speed_time, 1);
+        Serial.print("/");
+        Serial.println(speed, 1);
+    }    
+
     if(buttonEnc() == 1){
         
         actual_page = PAGE_HOME;
@@ -481,6 +508,49 @@ void clearBluePart(){         // Smaže modrou část displeje
   oled_display.fillRect(0, 16, 128, 64, BLACK);
   oled_display.display();
   
+}
+
+void pageCalibration(){
+    if(first_run_calibration){
+        clearBluePart();
+        first_run_calibration = false;
+    }
+
+    oled_display.setTextSize(1);  
+    oled_display.setCursor(0,19);
+    oled_display.setTextColor(WHITE, BLACK);
+    oled_display.println("Zamirte lasery ");
+    oled_display.setCursor(0,29);
+    oled_display.println("na senzory");
+    oled_display.setCursor(0,39);
+    oled_display.println("a zmacknete tlacitko.");
+    oled_display.display();
+
+    while(buttonEnc() != true){
+        updateButton();
+    }
+
+    FOTO_START_VALUE = analogRead(FOTO_START) + 80;
+    FOTO_STOP_VALUE = analogRead(FOTO_STOP) + 80;
+
+    oled_display.clearDisplay();
+    oled_display.setTextSize(1);  
+    oled_display.setCursor(0,19);
+    oled_display.setTextColor(WHITE, BLACK);
+    oled_display.println("Kalibrace dokoncena");
+    oled_display.setCursor(0,29);
+    oled_display.print("START :");
+    oled_display.println(FOTO_START_VALUE);
+    oled_display.setCursor(0,39);
+    oled_display.print("STOP :");
+    oled_display.println(FOTO_STOP_VALUE);
+    oled_display.display();
+
+    while(buttonEnc() != true){
+        updateButton();
+    }
+
+
 }
 
 void updatePage(){
@@ -644,7 +714,7 @@ void updateEncoder(){
             counter = max_cursor;
         }
         cursor = counter;
-        Serial.println(counter);
+        //Serial.println(counter);
      
    } 
    aLastState = aState; // Updates the previous state of the outputA with the current state
@@ -703,6 +773,18 @@ void timer(){
                 //Konec časomiry
                 }
 
+        
+        if(millis() - timer_com_time >= TIMER_COM && com_enabled == true){
+            Serial.print("C-T-");
+            Serial.print(timer_min);
+            Serial.print(":");
+            Serial.print(timer_sec);
+            Serial.print(".");
+            Serial.println(timer_setina);
+            timer_com_time = millis();
+        }
+        
+
         #ifdef DEBUG
             Serial.print("Setiny: ");
             Serial.println(timer_setina);
@@ -720,6 +802,7 @@ void runTimer(){
       Serial.println("TIMER START");
     timer_run = true;
     actual_page = PAGE_TIMER;
+    if(com_enabled)     Serial.println("C-C-START");
     }
 
   if(fotoStop() == 0 && timer_running == true){
@@ -727,7 +810,8 @@ void runTimer(){
      }
   
   if(fotoStop() == 1 && now_timer == true && timer_running == true){
-      Serial.println("TIMER END");
+    Serial.println("TIMER END");
+    if(com_enabled)     Serial.println("C-C-STOP");
     timer_stop = true;
     actual_page = PAGE_SPEED_RESULTS;
     }
@@ -754,4 +838,52 @@ void runTimer(){
     }
 
   current_time = millis() - start_timer;  
+}
+
+void readCommand(){
+    if(Serial.available()){
+        String command = Serial.readString();
+        if(command == "C-G-RESET"){
+            reset();
+        }else if(command == "C-CONNECT"){
+            com_enabled = true;
+            Serial.println("C-CONNECTED");
+            reset();
+        }else if(command == "C-ALL"){
+            Serial.println("DOSTAL JSEM ALL");
+            Serial.print("C-A-D-");
+            Serial.print(distance);
+            Serial.print("-Z-");
+            Serial.print(FOTO_START_VALUE);
+            Serial.print("-K-");
+            Serial.println(FOTO_STOP_VALUE);
+
+        }
+    }
+
+}
+
+void reset(){
+    actual_page = PAGE_HOME;
+    speed_time = 0;
+    speed = 0;
+    timer_setina = 0;
+    timer_sec = 0;
+    timer_min = 0;
+
+    first_run_set_distance = true; // Proměná, aby část kódu proběhla jen jednou
+    first_run_set_mod = true;
+    first_run_home = true;
+    first_run_menu = true;
+    first_run_comming_soon = true;
+    first_run_speed_results = true;
+    first_run_timer = true;
+
+    timer_run = false;
+    timer_stop = false;
+    timer_running = false;
+    start_timer = 0;
+    timer_end = 0;
+
+    oled_display.clearDisplay();
 }
