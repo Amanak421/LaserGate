@@ -1,2 +1,2 @@
 # LaserGate
-Desktop app for project LaserGate. This app function as display for results from laser gates. Connection is possible throught serial port. It function in two diffenrent modes.
+Desktop app for project LaserGate. This app functions as a display for results from laser gates. Connection is possible through a serial port. It can function in two different modes. The first mode just shows time and after an object crosses the second laser, velocity is shown. Letter mode allows you to generate random velocity, that moving object must-have. It can be used for games such as throwing a ball. After the second laser is crossed app show actuall velocity and calculate the difference. The goal is to have the smallest difference possible.
